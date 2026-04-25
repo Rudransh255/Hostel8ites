@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
+import { useAuth } from '@/components/UserProvider';
 import { subscribeToListings, type ListingData } from '@/lib/listings';
 
 const IconPackage = ({ size = 24 }: { size?: number }) => (
@@ -19,14 +20,15 @@ const IconFlame = ({ size = 12 }: { size?: number }) => (
   </svg>
 );
 
-const categories = [
-  { name: 'All', active: true },
-  { name: 'Snacks', active: false },
-  { name: 'Noodles', active: false },
-  { name: 'Drinks', active: false },
-  { name: 'Toiletries', active: false },
-  { name: 'Stationery', active: false },
-];
+const CATEGORIES = ['All', 'Snacks', 'Noodles', 'Drinks', 'Toiletries', 'Stationery', 'Other'];
+
+type SortKey = 'newest' | 'price-asc' | 'price-desc';
+
+const SORT_LABELS: Record<SortKey, string> = {
+  'newest': 'Newest',
+  'price-asc': 'Price: Low to High',
+  'price-desc': 'Price: High to Low',
+};
 
 function formatTime(ms: number) {
   if (ms <= 0) return '0:00';
@@ -37,9 +39,16 @@ function formatTime(ms: number) {
 }
 
 export default function HomePage() {
+  const { profile } = useAuth();
   const [listings, setListings] = useState<ListingData[]>([]);
   const [loading, setLoading] = useState(true);
   const [now, setNow] = useState(() => Date.now());
+
+  // Filters
+  const [search, setSearch] = useState('');
+  const [activeCategory, setActiveCategory] = useState('All');
+  const [sortBy, setSortBy] = useState<SortKey>('newest');
+  const [sortOpen, setSortOpen] = useState(false);
 
   useEffect(() => {
     const unsub = subscribeToListings((items) => {
@@ -54,27 +63,81 @@ export default function HomePage() {
     return () => clearInterval(t);
   }, []);
 
+  // Apply filters + sort
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    let items = listings.filter((item) => {
+      if (activeCategory !== 'All' && item.category !== activeCategory) return false;
+      if (q) {
+        const inTitle = item.title?.toLowerCase().includes(q);
+        const inDescription = item.description?.toLowerCase().includes(q);
+        const inSeller = item.sellerName?.toLowerCase().includes(q);
+        if (!inTitle && !inDescription && !inSeller) return false;
+      }
+      return true;
+    });
+
+    // Sort
+    items = [...items].sort((a, b) => {
+      const aPrice = a.status === 'auction' ? a.currentBid ?? a.price : a.price;
+      const bPrice = b.status === 'auction' ? b.currentBid ?? b.price : b.price;
+      if (sortBy === 'price-asc') return aPrice - bPrice;
+      if (sortBy === 'price-desc') return bPrice - aPrice;
+      // newest is the default order (subscribeToListings already sorts by createdAt desc)
+      return 0;
+    });
+
+    return items;
+  }, [listings, search, activeCategory, sortBy]);
+
+  const greetingName = profile?.name?.split(' ')[0] || 'there';
+  const hasFilters = search || activeCategory !== 'All';
+
   return (
     <div className="flex flex-col gap-5 px-5 pt-4 md:px-8 md:pt-6">
 
       {/* ── Header ──────────────────────────────── */}
       <div className="flex items-center justify-between">
         <div className="flex flex-col gap-1">
-          <span className="text-[13px] font-medium text-[#9CA3AF]">Hey, Rudransh</span>
+          <span className="text-[13px] font-medium text-[#9CA3AF]">Hey, {greetingName}</span>
           <h1 className="text-[28px] md:text-[32px] font-bold text-[#0A0E1A] tracking-[-0.5px]">Marketplace</h1>
         </div>
-        <div className="w-11 h-11 rounded-full bg-[#0062FF]" />
+        <div className="w-11 h-11 rounded-full bg-[#0062FF] flex items-center justify-center text-white font-bold">
+          {profile?.name?.[0]?.toUpperCase() || '?'}
+        </div>
       </div>
 
       {/* ── Search Row ──────────────────────────── */}
       <div className="flex gap-[10px] items-center">
-        <div className="flex-1 h-[52px] bg-[#F5F6F8] rounded-[14px] flex items-center gap-[10px] px-4">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <div className="flex-1 h-[52px] bg-[#F5F6F8] rounded-[14px] flex items-center gap-[10px] px-4 focus-within:ring-2 focus-within:ring-[#0062FF]/20 transition">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="flex-shrink-0">
             <circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>
           </svg>
-          <span className="text-sm text-[#9CA3AF]">Search snacks, noodles, drinks...</span>
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search snacks, noodles, drinks..."
+            className="flex-1 bg-transparent outline-none text-sm text-[#0A0E1A] placeholder:text-[#9CA3AF] min-w-0"
+          />
+          {search && (
+            <button
+              onClick={() => setSearch('')}
+              className="text-[#9CA3AF] hover:text-[#0A0E1A] flex-shrink-0"
+              aria-label="Clear search"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="10"/>
+                <path d="m15 9-6 6"/><path d="m9 9 6 6"/>
+              </svg>
+            </button>
+          )}
         </div>
-        <Link href="/dashboard/add-listing" className="w-[52px] h-[52px] bg-[#0062FF] rounded-[14px] flex items-center justify-center flex-shrink-0 hover:bg-[#0055E0] transition-colors">
+        <Link
+          href="/dashboard/add-listing"
+          className="w-[52px] h-[52px] bg-[#0062FF] rounded-[14px] flex items-center justify-center flex-shrink-0 hover:bg-[#0055E0] transition-colors"
+          aria-label="Add new listing"
+        >
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M5 12h14"/><path d="M12 5v14"/>
           </svg>
@@ -83,49 +146,102 @@ export default function HomePage() {
 
       {/* ── Category Chips ──────────────────────── */}
       <div className="flex gap-2 overflow-x-auto no-scrollbar">
-        {categories.map((cat) => (
-          <button
-            key={cat.name}
-            className={`px-4 py-[10px] rounded-full text-[13px] font-medium whitespace-nowrap transition-all ${
-              cat.active
-                ? 'bg-[#0A0E1A] text-white font-semibold'
-                : 'bg-[#F5F6F8] text-[#4B5563] hover:bg-[#E8EAED]'
-            }`}
-          >
-            {cat.name}
-          </button>
-        ))}
+        {CATEGORIES.map((cat) => {
+          const isActive = activeCategory === cat;
+          return (
+            <button
+              key={cat}
+              onClick={() => setActiveCategory(cat)}
+              className={`px-4 py-[10px] rounded-full text-[13px] whitespace-nowrap transition-all ${
+                isActive
+                  ? 'bg-[#0A0E1A] text-white font-semibold'
+                  : 'bg-[#F5F6F8] text-[#4B5563] font-medium hover:bg-[#E8EAED]'
+              }`}
+            >
+              {cat}
+            </button>
+          );
+        })}
       </div>
 
       {/* ── Sort Row ────────────────────────────── */}
       <div className="flex items-center justify-between">
         <span className="text-[13px] font-medium text-[#4B5563]">
-          {listings.length} item{listings.length === 1 ? '' : 's'} available
+          {filtered.length} item{filtered.length === 1 ? '' : 's'} {hasFilters ? 'matched' : 'available'}
         </span>
-        <div className="flex items-center gap-[6px] bg-[#E6EFFF] rounded-full px-3 py-2 cursor-pointer hover:bg-[#D6E4FF] transition-colors">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#0062FF" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="m3 16 4 4 4-4"/><path d="M7 20V4"/><path d="M11 4h4"/><path d="M11 8h7"/><path d="M11 12h10"/>
-          </svg>
-          <span className="text-xs font-semibold text-[#0062FF]">Newest</span>
+
+        <div className="relative">
+          <button
+            onClick={() => setSortOpen((o) => !o)}
+            className="flex items-center gap-[6px] bg-[#E6EFFF] rounded-full px-3 py-2 cursor-pointer hover:bg-[#D6E4FF] transition-colors"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#0062FF" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="m3 16 4 4 4-4"/><path d="M7 20V4"/><path d="M11 4h4"/><path d="M11 8h7"/><path d="M11 12h10"/>
+            </svg>
+            <span className="text-xs font-semibold text-[#0062FF]">{SORT_LABELS[sortBy]}</span>
+          </button>
+
+          {sortOpen && (
+            <>
+              <div
+                onClick={() => setSortOpen(false)}
+                className="fixed inset-0 z-10"
+              />
+              <div className="absolute right-0 top-full mt-2 bg-white rounded-[14px] shadow-[0_4px_16px_rgba(0,0,0,0.1)] border border-[#E5E7EB] overflow-hidden z-20 min-w-[180px]">
+                {(Object.keys(SORT_LABELS) as SortKey[]).map((key) => (
+                  <button
+                    key={key}
+                    onClick={() => {
+                      setSortBy(key);
+                      setSortOpen(false);
+                    }}
+                    className={`w-full text-left px-4 py-3 text-xs font-medium hover:bg-[#F5F6F8] transition-colors ${
+                      sortBy === key ? 'text-[#0062FF] bg-[#E6EFFF]' : 'text-[#0A0E1A]'
+                    }`}
+                  >
+                    {SORT_LABELS[key]}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
         </div>
       </div>
 
       {/* ── Product Grid ────────────────────────── */}
       {loading ? (
         <div className="py-12 text-center text-sm text-[#9CA3AF]">Loading listings...</div>
-      ) : listings.length === 0 ? (
+      ) : filtered.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-12 text-center gap-2">
           <div className="w-16 h-16 rounded-full bg-[#F5F6F8] flex items-center justify-center text-[#9CA3AF] mb-2">
             <IconPackage size={32} />
           </div>
-          <p className="text-sm font-medium text-[#9CA3AF]">No listings yet</p>
-          <Link href="/dashboard/add-listing" className="text-[#0062FF] font-semibold text-sm mt-2">
-            Be the first to list something
-          </Link>
+          {hasFilters ? (
+            <>
+              <p className="text-sm font-medium text-[#0A0E1A]">No matches found</p>
+              <p className="text-xs text-[#9CA3AF]">Try a different search term or category.</p>
+              <button
+                onClick={() => {
+                  setSearch('');
+                  setActiveCategory('All');
+                }}
+                className="text-[#0062FF] font-semibold text-sm mt-2"
+              >
+                Clear filters
+              </button>
+            </>
+          ) : (
+            <>
+              <p className="text-sm font-medium text-[#9CA3AF]">No listings yet</p>
+              <Link href="/dashboard/add-listing" className="text-[#0062FF] font-semibold text-sm mt-2">
+                Be the first to list something
+              </Link>
+            </>
+          )}
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 pb-4">
-          {listings.map((product) => {
+          {filtered.map((product) => {
             const isAuction = product.status === 'auction';
             const endsAtMs = product.auctionEndsAt?.toMillis() ?? 0;
             const timeLeft = Math.max(0, endsAtMs - now);
