@@ -14,19 +14,27 @@ export default function ImageUpload({ onImageSelected }: ImageUploadProps) {
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      if (file.size > 5 * 1024 * 1024) {
-        toast.error('Image must be less than 5 MB');
-        return;
-      }
-      
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setPreview(reader.result as string);
-      };
-      reader.readAsDataURL(file);
-      onImageSelected(file);
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      toast.error('Please select an image file');
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
     }
+
+    const sizeMB = file.size / (1024 * 1024);
+    if (sizeMB > 5) {
+      toast.error(`Image is too large (${sizeMB.toFixed(1)} MB). Max size is 5 MB.`);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setPreview(reader.result as string);
+    };
+    reader.readAsDataURL(file);
+    onImageSelected(file);
   };
 
   const clearImage = () => {

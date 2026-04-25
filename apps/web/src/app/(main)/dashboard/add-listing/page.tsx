@@ -63,6 +63,12 @@ export default function AddListingPage() {
       let imageData = '';
       if (imageFile) {
         imageData = await compressImage(imageFile);
+        // Firestore field limit is ~1 MiB. Base64 is ~33% larger than the bytes it encodes.
+        if (imageData.length > 900_000) {
+          toast.error('Image is too large after compression. Please pick a smaller photo.');
+          setLoading(false);
+          return;
+        }
       }
 
       if (!user || !profile) {
