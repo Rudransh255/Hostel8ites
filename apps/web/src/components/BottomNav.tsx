@@ -2,6 +2,9 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useEffect, useState } from 'react';
+import { useAuth } from './UserProvider';
+import { subscribeToConversations, isConversationUnread } from '@/lib/messages';
 
 const tabs = [
   { name: 'SHOP', href: '/', icon: 'store' },
@@ -28,6 +31,19 @@ const icons: Record<string, React.ReactNode> = {
 
 export default function BottomNav() {
   const pathname = usePathname();
+  const { user } = useAuth();
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  useEffect(() => {
+    if (!user) {
+      setUnreadCount(0);
+      return;
+    }
+    const unsub = subscribeToConversations(user.uid, (cs) => {
+      setUnreadCount(cs.filter((c) => isConversationUnread(c, user.uid)).length);
+    });
+    return () => unsub();
+  }, [user]);
 
   return (
     <div className="fixed bottom-0 left-0 right-0 z-50 px-[21px] py-3 bg-white">
@@ -37,6 +53,7 @@ export default function BottomNav() {
             tab.href === '/'
               ? pathname === '/'
               : pathname.startsWith(tab.href);
+          const showBadge = tab.icon === 'message-circle' && unreadCount > 0;
 
           return (
             <Link
@@ -48,7 +65,14 @@ export default function BottomNav() {
                   : 'text-[#9CA3AF] hover:text-[#4B5563]'
               }`}
             >
-              {icons[tab.icon]}
+              <div className="relative">
+                {icons[tab.icon]}
+                {showBadge && (
+                  <span className="absolute -top-1.5 -right-2 min-w-[16px] h-[16px] px-1 bg-[#EF4444] text-white text-[10px] font-bold rounded-full flex items-center justify-center border-2 border-white">
+                    {unreadCount > 9 ? '9+' : unreadCount}
+                  </span>
+                )}
+              </div>
               <span className="text-[10px] font-semibold tracking-[0.5px]">
                 {tab.name}
               </span>

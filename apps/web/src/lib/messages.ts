@@ -22,6 +22,7 @@ export interface Conversation {
   lastMessage: string;
   lastMessageAt: Timestamp | null;
   lastSenderId: string;
+  lastReadAt?: Record<string, Timestamp | null>;
   listingId?: string;
   listingTitle?: string;
   createdAt: Timestamp;
@@ -146,5 +147,25 @@ export async function sendMessage(
     lastSenderId: sender.id,
     [`participantNames.${sender.id}`]: sender.name,
     [`participantPhotos.${sender.id}`]: sender.photoURL || null,
+    // Sender has obviously read everything up to their own message
+    [`lastReadAt.${sender.id}`]: serverTimestamp(),
   });
+}
+
+export async function markConversationRead(conversationId: string, userId: string) {
+  try {
+    await updateDoc(doc(db, 'conversations', conversationId), {
+      [`lastReadAt.${userId}`]: serverTimestamp(),
+    });
+  } catch {
+    // ignore — conversation may not exist yet
+  }
+}
+
+export function isConversationUnread(c: Conversation, userId: string) {
+  if (!c.lastSenderId || c.lastSenderId === userId) return false;
+  if (!c.lastMessageAt) return false;
+  const readMs = c.lastReadAt?.[userId]?.toMillis?.() ?? 0;
+  const lastMs = c.lastMessageAt.toMillis();
+  return lastMs > readMs;
 }

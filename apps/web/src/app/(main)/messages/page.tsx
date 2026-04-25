@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/components/UserProvider';
-import { subscribeToConversations, type Conversation } from '@/lib/messages';
+import { subscribeToConversations, isConversationUnread, type Conversation } from '@/lib/messages';
 
 function formatTimeAgo(ms: number) {
   if (!ms) return '';
@@ -35,9 +35,7 @@ export default function MessagesPage() {
 
   if (!user) return null;
 
-  const unreadCount = convos.filter(
-    (c) => c.lastSenderId && c.lastSenderId !== user.uid
-  ).length;
+  const unreadCount = convos.filter((c) => isConversationUnread(c, user.uid)).length;
 
   return (
     <div className="flex flex-col gap-5 px-5 pt-4 md:px-8 md:pt-6">
@@ -75,7 +73,7 @@ export default function MessagesPage() {
             const otherPhoto = c.participantPhotos?.[otherId];
             const initial = otherName[0]?.toUpperCase() || '?';
             const lastMs = c.lastMessageAt?.toMillis?.() ?? 0;
-            const isUnread = c.lastSenderId && c.lastSenderId !== user.uid;
+            const isUnread = isConversationUnread(c, user.uid);
             const youSent = c.lastSenderId === user.uid;
 
             return (

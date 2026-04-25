@@ -156,14 +156,20 @@ export async function placeBid(listingId: string, user: BidUser, amount: number)
   });
 }
 
-export async function deleteListing(listingId: string, sellerId: string) {
+export async function deleteListing(
+  listingId: string,
+  user: { uid: string; email?: string | null; isModerator?: boolean }
+) {
   await runTransaction(db, async (tx) => {
     const ref = doc(db, 'listings', listingId);
     const snap = await tx.get(ref);
     if (!snap.exists()) throw new Error('Listing not found');
     const data = snap.data();
-    if (data.sellerId !== sellerId) throw new Error('Not authorized');
-    if (data.status === 'auction') throw new Error('Cannot delete during a live auction');
+    const isOwner = data.sellerId === user.uid;
+    if (!isOwner && !user.isModerator) throw new Error('Not authorized');
+    if (data.status === 'auction' && !user.isModerator) {
+      throw new Error('Cannot delete during a live auction');
+    }
     tx.delete(ref);
   });
 }

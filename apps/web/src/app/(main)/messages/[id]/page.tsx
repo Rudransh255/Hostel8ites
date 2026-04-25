@@ -7,6 +7,7 @@ import {
   subscribeToConversation,
   subscribeToMessages,
   sendMessage,
+  markConversationRead,
   type Conversation,
   type Message,
 } from '@/lib/messages';
@@ -48,6 +49,12 @@ export default function ChatPage() {
     const unsub = subscribeToMessages(id, setMessages);
     return () => unsub();
   }, [id]);
+
+  // Mark as read whenever this chat is open and a new message arrives
+  useEffect(() => {
+    if (!id || !user) return;
+    markConversationRead(id, user.uid);
+  }, [id, user, messages.length]);
 
   // Auto-scroll to bottom on new message
   useEffect(() => {

@@ -36,7 +36,7 @@ export default function DashboardPage() {
     if (!confirmDelete || !user) return;
     setDeleting(true);
     try {
-      await deleteListing(confirmDelete.id, user.uid);
+      await deleteListing(confirmDelete.id, { uid: user.uid, email: user.email });
       toast.success('Listing deleted');
       setConfirmDelete(null);
     } catch (e) {

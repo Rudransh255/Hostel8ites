@@ -3,7 +3,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/components/UserProvider';
-import { subscribeToListings, type ListingData } from '@/lib/listings';
+import { useToast } from '@/components/ToastProvider';
+import { subscribeToListings, deleteListing, type ListingData } from '@/lib/listings';
+import { isModerator } from '@/lib/moderators';
 
 const IconPackage = ({ size = 24 }: { size?: number }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -39,7 +41,8 @@ function formatTime(ms: number) {
 }
 
 export default function HomePage() {
-  const { profile } = useAuth();
+  const { user, profile } = useAuth();
+  const toast = useToast();
   const [listings, setListings] = useState<ListingData[]>([]);
   const [loading, setLoading] = useState(true);
   const [now, setNow] = useState(() => Date.now());
@@ -49,6 +52,29 @@ export default function HomePage() {
   const [activeCategory, setActiveCategory] = useState('All');
   const [sortBy, setSortBy] = useState<SortKey>('newest');
   const [sortOpen, setSortOpen] = useState(false);
+
+  const [confirmDelete, setConfirmDelete] = useState<ListingData | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
+  const userIsMod = isModerator(user?.email);
+
+  const handleDelete = async () => {
+    if (!confirmDelete || !user) return;
+    setDeleting(true);
+    try {
+      await deleteListing(confirmDelete.id, {
+        uid: user.uid,
+        email: user.email,
+        isModerator: userIsMod,
+      });
+      toast.success('Listing deleted');
+      setConfirmDelete(null);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed to delete');
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   useEffect(() => {
     const unsub = subscribeToListings((items) => {
@@ -261,6 +287,25 @@ export default function HomePage() {
                   </span>
                 )}
 
+                {userIsMod && !isAuction && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setConfirmDelete(product);
+                    }}
+                    aria-label="Delete listing (moderator)"
+                    className="absolute top-2 right-2 w-7 h-7 rounded-full bg-white/90 hover:bg-[#FEF2F2] hover:text-[#B91C1C] text-[#9CA3AF] flex items-center justify-center shadow-sm transition-colors z-10"
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M3 6h18"/>
+                      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/>
+                      <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                    </svg>
+                  </button>
+                )}
+
                 <div className="w-[72px] h-[72px] bg-white rounded-[14px] flex items-center justify-center flex-shrink-0 overflow-hidden group-hover:shadow-sm transition-shadow text-[#9CA3AF]">
                   {img ? (
                     // eslint-disable-next-line @next/next/no-img-element
@@ -291,6 +336,48 @@ export default function HomePage() {
               </Link>
             );
           })}
+        </div>
+      )}
+
+      {confirmDelete && (
+        <div
+          onClick={() => !deleting && setConfirmDelete(null)}
+          className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white rounded-[20px] p-6 w-full max-w-[360px] flex flex-col gap-4"
+          >
+            <div className="w-12 h-12 rounded-full bg-[#FEF2F2] text-[#B91C1C] flex items-center justify-center mx-auto">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M3 6h18"/>
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/>
+                <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+              </svg>
+            </div>
+            <div className="text-center flex flex-col gap-1">
+              <h2 className="text-[18px] font-bold text-[#0A0E1A]">Delete listing?</h2>
+              <p className="text-sm text-[#4B5563]">
+                &ldquo;{confirmDelete.title}&rdquo; by {confirmDelete.sellerName} will be permanently removed.
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setConfirmDelete(null)}
+                disabled={deleting}
+                className="flex-1 h-[44px] bg-[#F5F6F8] text-[#0A0E1A] font-semibold rounded-[12px] text-sm hover:bg-[#EEF0F3] transition disabled:opacity-60"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDelete}
+                disabled={deleting}
+                className="flex-1 h-[44px] bg-[#DC2626] text-white font-semibold rounded-[12px] text-sm hover:bg-[#B91C1C] transition disabled:opacity-60"
+              >
+                {deleting ? 'Deleting...' : 'Delete'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
