@@ -1,0 +1,14 @@
+{
+  "name": "hostelmart",
+  "version": "1.0.0",
+  "private": true,
+  "description": "HostelMart — Hostel-Based Peer-to-Peer Marketplace",
+  "scripts": {
+    "dev": "npm run dev --prefix apps/web",
+    "build": "npm run build --prefix apps/web",
+    "lint": "npm run lint --prefix apps/web"
+  },
+  "dependencies": {
+    "zustand": "^5.0.12"
+  }
+}
