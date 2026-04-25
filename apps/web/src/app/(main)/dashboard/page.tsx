@@ -3,7 +3,8 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/components/UserProvider';
-import { subscribeToMyListings, type ListingData } from '@/lib/listings';
+import { useToast } from '@/components/ToastProvider';
+import { subscribeToMyListings, deleteListing, type ListingData } from '@/lib/listings';
 
 const IconPackage = ({ size = 24 }: { size?: number }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -24,9 +25,26 @@ type Tab = 'active' | 'sold';
 
 export default function DashboardPage() {
   const { user } = useAuth();
+  const toast = useToast();
   const [listings, setListings] = useState<ListingData[]>([]);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<Tab>('active');
+  const [confirmDelete, setConfirmDelete] = useState<ListingData | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
+  const handleDelete = async () => {
+    if (!confirmDelete || !user) return;
+    setDeleting(true);
+    try {
+      await deleteListing(confirmDelete.id, user.uid);
+      toast.success('Listing deleted');
+      setConfirmDelete(null);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed to delete');
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   useEffect(() => {
     if (!user) return;
@@ -120,6 +138,7 @@ export default function DashboardPage() {
           {visible.map((p) => {
             const isAuction = p.status === 'auction';
             const isSold = p.status === 'sold';
+            const canDelete = !isAuction && !isSold;
             const img = p.images?.[0];
             const displayPrice = isSold ? p.finalPrice : isAuction ? p.currentBid ?? p.price : p.price;
 
@@ -129,6 +148,26 @@ export default function DashboardPage() {
                 href={`/listing/${p.id}`}
                 className="flex items-center gap-[14px] bg-[#F5F6F8] rounded-[18px] p-[14px] hover:bg-[#EEF0F3] hover:shadow-md transition-all duration-200 relative"
               >
+                {canDelete && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setConfirmDelete(p);
+                    }}
+                    aria-label="Delete listing"
+                    className="absolute top-2 right-2 w-7 h-7 rounded-full bg-white/90 hover:bg-[#FEF2F2] hover:text-[#B91C1C] text-[#9CA3AF] flex items-center justify-center shadow-sm transition-colors z-10"
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M3 6h18"/>
+                      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/>
+                      <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                      <line x1="10" y1="11" x2="10" y2="17"/>
+                      <line x1="14" y1="11" x2="14" y2="17"/>
+                    </svg>
+                  </button>
+                )}
                 {isAuction && (
                   <span className="absolute top-2 right-2 bg-[#F59E0B] text-white text-[9px] font-bold tracking-[0.5px] rounded-full px-[8px] py-[4px] flex items-center gap-[4px]">
                     <IconFlame size={10} />
@@ -173,6 +212,48 @@ export default function DashboardPage() {
               </Link>
             );
           })}
+        </div>
+      )}
+
+      {confirmDelete && (
+        <div
+          onClick={() => !deleting && setConfirmDelete(null)}
+          className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white rounded-[20px] p-6 w-full max-w-[360px] flex flex-col gap-4"
+          >
+            <div className="w-12 h-12 rounded-full bg-[#FEF2F2] text-[#B91C1C] flex items-center justify-center mx-auto">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M3 6h18"/>
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/>
+                <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+              </svg>
+            </div>
+            <div className="text-center flex flex-col gap-1">
+              <h2 className="text-[18px] font-bold text-[#0A0E1A]">Delete listing?</h2>
+              <p className="text-sm text-[#4B5563]">
+                &ldquo;{confirmDelete.title}&rdquo; will be permanently removed. This can&apos;t be undone.
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setConfirmDelete(null)}
+                disabled={deleting}
+                className="flex-1 h-[44px] bg-[#F5F6F8] text-[#0A0E1A] font-semibold rounded-[12px] text-sm hover:bg-[#EEF0F3] transition disabled:opacity-60"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDelete}
+                disabled={deleting}
+                className="flex-1 h-[44px] bg-[#DC2626] text-white font-semibold rounded-[12px] text-sm hover:bg-[#B91C1C] transition disabled:opacity-60"
+              >
+                {deleting ? 'Deleting...' : 'Delete'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

@@ -3,6 +3,7 @@ import {
   collection,
   doc,
   addDoc,
+  deleteDoc,
   onSnapshot,
   query,
   orderBy,
@@ -152,6 +153,18 @@ export async function placeBid(listingId: string, user: BidUser, amount: number)
     userRoom: user.room || null,
     amount,
     createdAt: serverTimestamp(),
+  });
+}
+
+export async function deleteListing(listingId: string, sellerId: string) {
+  await runTransaction(db, async (tx) => {
+    const ref = doc(db, 'listings', listingId);
+    const snap = await tx.get(ref);
+    if (!snap.exists()) throw new Error('Listing not found');
+    const data = snap.data();
+    if (data.sellerId !== sellerId) throw new Error('Not authorized');
+    if (data.status === 'auction') throw new Error('Cannot delete during a live auction');
+    tx.delete(ref);
   });
 }
 

@@ -92,15 +92,17 @@ function OnboardingForm({ user, onDone }: { user: User; onDone: () => void }) {
           </div>
 
           <div className="flex flex-col gap-2">
-            <label className="text-sm font-medium text-[#4B5563]">Hostel Block / Name</label>
-            <input
-              type="text"
+            <label className="text-sm font-medium text-[#4B5563]">Hostel Block</label>
+            <select
               value={hostelName}
               onChange={(e) => setHostelName(e.target.value)}
-              placeholder="e.g. Block A, Hostel 5"
-              maxLength={40}
-              className="w-full h-[52px] bg-[#F5F6F8] rounded-[14px] px-4 text-sm text-[#0A0E1A] placeholder:text-[#9CA3AF] outline-none focus:ring-2 focus:ring-[#0062FF]/20 transition"
-            />
+              className="w-full h-[52px] bg-[#F5F6F8] rounded-[14px] px-4 text-sm text-[#0A0E1A] outline-none focus:ring-2 focus:ring-[#0062FF]/20 transition appearance-none bg-no-repeat bg-[right_1rem_center] bg-[length:12px] cursor-pointer"
+              style={{ backgroundImage: "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%239CA3AF' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>\")" }}
+            >
+              <option value="" disabled>Select your block</option>
+              <option value="C-Block">C-Block</option>
+              <option value="D-Block">D-Block</option>
+            </select>
           </div>
 
           <div className="flex flex-col gap-2">
