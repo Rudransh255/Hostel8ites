@@ -27,12 +27,19 @@ export async function getProfile(uid: string): Promise<UserProfile | null> {
 
 export function subscribeToProfile(
   uid: string,
-  cb: (profile: UserProfile | null) => void
+  cb: (profile: UserProfile | null) => void,
+  onError?: (error: Error) => void
 ) {
-  return onSnapshot(doc(db, 'users', uid), (snap) => {
-    if (!snap.exists()) return cb(null);
-    cb({ uid: snap.id, ...snap.data() } as UserProfile);
-  });
+  return onSnapshot(
+    doc(db, 'users', uid),
+    (snap) => {
+      if (!snap.exists()) return cb(null);
+      cb({ uid: snap.id, ...snap.data() } as UserProfile);
+    },
+    (error) => {
+      onError?.(error);
+    }
+  );
 }
 
 export async function saveProfile(profile: {

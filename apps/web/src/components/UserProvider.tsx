@@ -141,6 +141,7 @@ export default function UserProvider({ children }: { children: React.ReactNode }
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [authReady, setAuthReady] = useState(false);
   const [profileReady, setProfileReady] = useState(false);
+  const [profileError, setProfileError] = useState('');
   const [signingIn, setSigningIn] = useState(false);
   const [error, setError] = useState('');
 
@@ -165,17 +166,31 @@ export default function UserProvider({ children }: { children: React.ReactNode }
     if (!user) {
       setProfile(null);
       setProfileReady(false);
+      setProfileError('');
       return;
     }
     setProfileReady(false);
-    const unsub = subscribeToProfile(user.uid, (p) => {
-      setProfile(p);
-      setProfileReady(true);
-      if (p && typeof window !== 'undefined') {
-        // Override cached name with profile-set name (in case user customised)
-        localStorage.setItem('hostelmart_user_name', p.name);
+    setProfileError('');
+    const unsub = subscribeToProfile(
+      user.uid,
+      (p) => {
+        setProfile(p);
+        setProfileReady(true);
+        if (p && typeof window !== 'undefined') {
+          // Override cached name with profile-set name (in case user customised)
+          localStorage.setItem('hostelmart_user_name', p.name);
+        }
+      },
+      (err) => {
+        setProfile(null);
+        setProfileReady(true);
+        setProfileError(
+          err.message.includes('permission-denied')
+            ? 'Your account can sign in, but Firestore is blocking access to your profile. Update your Firebase rules to allow users to read and write their own user document.'
+            : err.message
+        );
       }
-    });
+    );
     return () => unsub();
   }, [user]);
 
@@ -252,6 +267,33 @@ export default function UserProvider({ children }: { children: React.ReactNode }
   }
 
   // Auth done but no profile yet — show onboarding
+  if (profileError) {
+    return (
+      <div className="min-h-screen bg-[#F0F2F5] flex items-center justify-center p-4">
+        <div className="bg-white rounded-[28px] shadow-[0_4px_32px_rgba(0,0,0,0.08)] px-8 py-10 w-full max-w-[460px] flex flex-col gap-5">
+          <div className="flex flex-col gap-2">
+            <span className="text-[#DC2626] text-[11px] font-semibold tracking-[1.5px]">
+              PROFILE ACCESS ERROR
+            </span>
+            <h1 className="text-[24px] font-bold text-[#0A0E1A] tracking-[-0.5px]">
+              We couldn&apos;t load your profile
+            </h1>
+            <p className="text-sm text-[#4B5563] leading-[1.5]">
+              {profileError}
+            </p>
+          </div>
+
+          <button
+            onClick={handleSignOut}
+            className="w-full h-[52px] bg-[#0A0E1A] text-white font-semibold rounded-[14px] text-sm hover:bg-[#111827] active:scale-[0.98] transition"
+          >
+            Sign out
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   if (!profile) {
     return <OnboardingForm user={user} onDone={() => { /* profile subscription will pick it up */ }} />;
   }
