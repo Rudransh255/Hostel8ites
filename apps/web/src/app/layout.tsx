@@ -19,6 +19,9 @@ export const metadata: Metadata = {
   description:
     "Buy and sell snacks, groceries, and daily essentials with your hostel neighbours. Fast, simple, and hyperlocal.",
   keywords: ["hostel", "marketplace", "buy", "sell", "students", "snacks"],
+  verification: {
+    google: "bTEAgo6YNRgl7TZWFAz0k_cBgtc4_lM6L7chiPQGVE0",
+  },
 };
 
 export const viewport: Viewport = {

@@ -5,9 +5,43 @@ import { useEffect, useMemo, useState } from 'react';
 import { useAuth } from '@/components/UserProvider';
 import { useToast } from '@/components/ToastProvider';
 import { subscribeToMyListings, type ListingData } from '@/lib/listings';
+import { auth } from '@/lib/firebase';
 import { saveProfile } from '@/lib/profile';
+import { updateProfile as updateAuthProfile } from 'firebase/auth';
 
 const blocks = ['C-Block', 'D-Block'];
+
+const compressImage = (file: File): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new window.Image();
+      img.onload = () => {
+        const MAX = 500;
+        let { width, height } = img;
+        if (width > height && width > MAX) {
+          height = (height * MAX) / width;
+          width = MAX;
+        } else if (height > MAX) {
+          width = (width * MAX) / height;
+          height = MAX;
+        }
+
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return reject(new Error('Canvas unavailable'));
+        ctx.drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL('image/jpeg', 0.72));
+      };
+      img.onerror = () => reject(new Error('Could not load image'));
+      img.src = e.target?.result as string;
+    };
+    reader.onerror = () => reject(new Error('Could not read file'));
+    reader.readAsDataURL(file);
+  });
+};
 
 function formatMemberSince(value?: { toDate?: () => Date }) {
   if (!value?.toDate) return 'Recently joined';
@@ -39,6 +73,15 @@ function CloseIcon() {
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M18 6 6 18" />
       <path d="m6 6 12 12" />
+    </svg>
+  );
+}
+
+function CameraIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M14.5 4h-5L7.5 6H4a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-3.5z" />
+      <circle cx="12" cy="13" r="3" />
     </svg>
   );
 }
@@ -122,6 +165,8 @@ function ProfileEditModal({
   const [name, setName] = useState(initialName);
   const [hostelName, setHostelName] = useState(initialHostelName);
   const [roomNumber, setRoomNumber] = useState(initialRoomNumber);
+  const [photoPreview, setPhotoPreview] = useState(photoURL);
+  const [imageFile, setImageFile] = useState<File | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
@@ -130,7 +175,36 @@ function ProfileEditModal({
   const isChanged =
     name.trim() !== initialName.trim() ||
     hostelName.trim() !== initialHostelName.trim() ||
-    roomNumber.trim() !== initialRoomNumber.trim();
+    roomNumber.trim() !== initialRoomNumber.trim() ||
+    imageFile !== null ||
+    photoPreview !== photoURL;
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      setError('Please choose an image file.');
+      return;
+    }
+
+    const sizeMB = file.size / (1024 * 1024);
+    if (sizeMB > 5) {
+      setError(`Image is too large (${sizeMB.toFixed(1)} MB). Max size is 5 MB.`);
+      return;
+    }
+
+    const objectUrl = URL.createObjectURL(file);
+    setImageFile(file);
+    setPhotoPreview(objectUrl);
+    setError('');
+  };
+
+  const removePhoto = () => {
+    setImageFile(null);
+    setPhotoPreview(null);
+    setError('');
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -144,14 +218,31 @@ function ProfileEditModal({
     setError('');
 
     try {
+      let nextPhotoURL = photoPreview;
+
+      if (imageFile) {
+        nextPhotoURL = await compressImage(imageFile);
+        if (nextPhotoURL.length > 900_000) {
+          setError('Profile photo is too large after compression. Please choose a smaller image.');
+          setSaving(false);
+          return;
+        }
+      }
+
       await saveProfile({
         uid,
         name: name.trim(),
         hostelName: hostelName.trim(),
         roomNumber: roomNumber.trim(),
         email,
-        photoURL,
+        photoURL: nextPhotoURL,
       });
+      if (auth.currentUser) {
+        await updateAuthProfile(auth.currentUser, {
+          displayName: name.trim(),
+          photoURL: nextPhotoURL,
+        });
+      }
       toast.success('Profile updated');
       onSaved();
       onClose();
@@ -198,6 +289,52 @@ function ProfileEditModal({
         </div>
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+          <div className="rounded-[22px] border border-[#E5E7EB] bg-[#FCFCFD] p-4">
+            <div className="flex items-center gap-4">
+              {photoPreview ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={photoPreview}
+                  alt={name || 'Profile preview'}
+                  className="h-20 w-20 rounded-[22px] object-cover"
+                />
+              ) : (
+                <div className="flex h-20 w-20 items-center justify-center rounded-[22px] bg-[#F97316] text-[28px] font-bold text-white">
+                  {(name || initialName || 'U')[0]?.toUpperCase() || 'U'}
+                </div>
+              )}
+
+              <div className="flex-1">
+                <p className="text-sm font-semibold text-[#0A0E1A]">Profile picture</p>
+                <p className="mt-1 text-xs leading-[1.5] text-[#6B7280]">
+                  Upload a clear photo so people can recognize you in chats, requests, and listings.
+                </p>
+                <div className="mt-3 flex gap-2">
+                  <label className="inline-flex cursor-pointer items-center gap-2 rounded-full bg-[#FFF7ED] px-4 py-2 text-sm font-semibold text-[#C2410C] transition hover:bg-[#FFEDD5]">
+                    <CameraIcon />
+                    Change photo
+                    <input
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp"
+                      className="hidden"
+                      onChange={handleFileChange}
+                    />
+                  </label>
+
+                  {photoPreview && (
+                    <button
+                      type="button"
+                      onClick={removePhoto}
+                      className="rounded-full bg-[#F5F6F8] px-4 py-2 text-sm font-semibold text-[#4B5563] transition hover:bg-[#ECEFF3]"
+                    >
+                      Remove
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+
           <div className="grid gap-4 md:grid-cols-2">
             <label className="flex flex-col gap-2 md:col-span-2">
               <span className="text-sm font-medium text-[#374151]">Display name</span>
@@ -281,6 +418,7 @@ export default function ProfilePage() {
   const displayName = profile?.name || user?.displayName || 'User';
   const initial = displayName[0]?.toUpperCase() || 'U';
   const email = user?.email || '';
+  const displayPhoto = profile?.photoURL || user?.photoURL || null;
 
   const stats = useMemo(() => {
     const activeCount = myListings.filter((item) => item.status === 'active' || item.status === 'auction').length;
@@ -303,10 +441,10 @@ export default function ProfilePage() {
           <div className="rounded-[30px] border border-[#FED7AA] bg-[radial-gradient(circle_at_top_left,_rgba(249,115,22,0.18),_transparent_36%),linear-gradient(135deg,#111827_0%,#1F2937_55%,#374151_100%)] p-5 text-white shadow-[0_18px_60px_rgba(15,23,42,0.18)] md:p-8">
             <div className="flex flex-col gap-6 md:flex-row md:items-end md:justify-between">
               <div className="flex items-start gap-4 md:gap-5">
-                {user?.photoURL ? (
+                {displayPhoto ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
-                    src={user.photoURL}
+                    src={displayPhoto}
                     alt={displayName}
                     referrerPolicy="no-referrer"
                     className="h-20 w-20 rounded-[24px] border border-white/20 object-cover shadow-[0_12px_28px_rgba(0,0,0,0.22)] md:h-24 md:w-24"
@@ -469,7 +607,7 @@ export default function ProfilePage() {
           initialHostelName={profile?.hostelName || ''}
           initialRoomNumber={profile?.roomNumber || ''}
           email={user.email || ''}
-          photoURL={user.photoURL}
+          photoURL={displayPhoto}
           uid={user.uid}
           onClose={() => setEditOpen(false)}
           onSaved={() => {}}
