@@ -174,6 +174,25 @@ export async function deleteListing(
   });
 }
 
+// Seller ends the auction immediately and sells to the current top bidder.
+export async function endAuctionNow(listingId: string, sellerId: string) {
+  await runTransaction(db, async (tx) => {
+    const ref = doc(db, 'listings', listingId);
+    const snap = await tx.get(ref);
+    if (!snap.exists()) throw new Error('Listing not found');
+    const data = snap.data();
+    if (data.sellerId !== sellerId) throw new Error('Not authorized');
+    if (data.status !== 'auction') throw new Error('Auction is not live');
+    tx.update(ref, {
+      status: 'sold',
+      winnerId: data.currentBidderId || null,
+      winnerName: data.currentBidderName || null,
+      finalPrice: data.currentBid || data.price,
+      auctionEndsAt: Timestamp.now(),
+    });
+  });
+}
+
 // Called client-side when the timer expires. Idempotent — safe to call multiple times.
 export async function finalizeAuction(listingId: string) {
   await runTransaction(db, async (tx) => {

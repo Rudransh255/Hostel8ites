@@ -8,6 +8,7 @@ import {
   buyListing,
   placeBid,
   finalizeAuction,
+  endAuctionNow,
   MIN_BID_INCREMENT,
   type ListingData,
   type BidData,
@@ -66,6 +67,7 @@ export default function ProductDetailPage() {
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [infoModal, setInfoModal] = useState<{ icon: 'flame' | 'check'; title: string; body: string } | null>(null);
+  const [confirmEnd, setConfirmEnd] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -156,6 +158,25 @@ export default function ProductDetailPage() {
       }
     } catch (e) {
       setErrorMsg(e instanceof Error ? e.message : 'Failed to buy');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleEndAuction = async () => {
+    if (!user || !listing) return;
+    setSubmitting(true);
+    setErrorMsg('');
+    try {
+      await endAuctionNow(listing.id, user.uid);
+      setConfirmEnd(false);
+      setInfoModal({
+        icon: 'check',
+        title: 'Auction ended',
+        body: `Sold to ${listing.currentBidderName || 'the current bidder'} for ₹${listing.currentBid || listing.price}.`,
+      });
+    } catch (e) {
+      setErrorMsg(e instanceof Error ? e.message : 'Failed to end auction');
     } finally {
       setSubmitting(false);
     }
@@ -301,6 +322,22 @@ export default function ProductDetailPage() {
               </div>
             )}
 
+            {timeLeft > 0 && isSeller && (
+              <div className="flex flex-col gap-2 pt-1">
+                <button
+                  onClick={() => setConfirmEnd(true)}
+                  disabled={submitting}
+                  className="w-full h-[46px] bg-[#10B981] text-white font-semibold rounded-[12px] text-sm hover:bg-[#059669] disabled:opacity-60 transition flex items-center justify-center gap-2"
+                >
+                  <IconCheckCircle size={16} />
+                  Sell now to {listing.currentBidderName} for ₹{listing.currentBid}
+                </button>
+                <p className="text-[11px] text-[#4B5563] text-center leading-[1.4]">
+                  Skip the timer and lock in the current top bid.
+                </p>
+              </div>
+            )}
+
             {bids.length > 0 && (
               <div className="flex flex-col gap-1 pt-2 border-t border-[#F59E0B]/20">
                 <span className="text-[11px] font-semibold text-[#4B5563] uppercase tracking-[0.5px] mb-1">
@@ -393,6 +430,47 @@ export default function ProductDetailPage() {
           Message Seller
         </button>
       </div>
+
+      {/* ── Confirm End Auction Modal ────────────── */}
+      {confirmEnd && (
+        <div
+          onClick={() => !submitting && setConfirmEnd(false)}
+          className="fixed inset-0 z-[100] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white rounded-[24px] w-full max-w-[400px] p-7 shadow-2xl flex flex-col gap-5"
+          >
+            <div className="flex flex-col items-center gap-3 text-center">
+              <div className="w-16 h-16 rounded-full bg-[#F0FDF4] text-[#10B981] flex items-center justify-center">
+                <IconCheckCircle size={28} />
+              </div>
+              <h2 className="text-[20px] font-bold text-[#0A0E1A] tracking-[-0.5px]">
+                Sell now?
+              </h2>
+              <p className="text-sm text-[#4B5563] leading-[1.5]">
+                Lock in the current bid and end the auction immediately. <strong className="text-[#0A0E1A]">{listing.currentBidderName}</strong> will win for <strong className="text-[#0A0E1A]">₹{listing.currentBid}</strong>.
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setConfirmEnd(false)}
+                disabled={submitting}
+                className="flex-1 h-[48px] bg-[#F5F6F8] text-[#0A0E1A] font-semibold rounded-[14px] text-sm hover:bg-[#EEF0F3] transition disabled:opacity-60"
+              >
+                Keep auction
+              </button>
+              <button
+                onClick={handleEndAuction}
+                disabled={submitting}
+                className="flex-1 h-[48px] bg-[#10B981] text-white font-semibold rounded-[14px] text-sm hover:bg-[#059669] transition disabled:opacity-60"
+              >
+                {submitting ? 'Ending...' : 'Sell now'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Info Modal ───────────────────────────── */}
       {infoModal && (
